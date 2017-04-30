@@ -1,10 +1,12 @@
 from __future__ import print_function
 import sys
+from os.path import join, basename, splitext
 import numpy as np
 from sklearn.externals import joblib
 
 def GetXy(lFeatMask,iAttributeIndx,iNumFrames,iFeatSize,bBalanceIt=False):
     arFeatData = np.zeros((1000000,iFeatSize),dtype='float32') #We can use empty instead of zeros to speed up but each element should be setted
+    arPhonesMask = np.zeros((1000000,52),dtype='int32')    
     vLabel = np.zeros((1000000),dtype='int32')-1 #We can use empty instead of zeros to speed up
     iPaddingFrames = iNumFrames/2 #Number of Frames added to the start and end of each uttrance
     iPntr = iPaddingFrames
@@ -15,17 +17,27 @@ def GetXy(lFeatMask,iAttributeIndx,iNumFrames,iFeatSize,bBalanceIt=False):
     for tFeatMask in lFeatMask:
         print(int((float(iCur)/iTotalFiles)*100),'%',end='\r')
         sFeatFile,sMaskFile = tFeatMask
+        sPhoneMaskFile = splitext(sMaskFile)[0]+'.pmask'
         arFileFeat = joblib.load(sFeatFile)
         arMask = joblib.load(sMaskFile)
+        arPMask = joblib.load(sPhoneMaskFile)
+        arPMask = arPMask.astype('int32')
+        #print(arPMask.shape)
         vMask = arMask[:,iAttributeIndx]
         iLenthFeat = arFileFeat.shape[0]
         iLenthLabel = vMask.shape[0]
         arFeatData[iPntr:iPntr+iLenthFeat] = arFileFeat
         vLabel[iPntr:iPntr+iLenthLabel] = vMask
+        #print(arPhonesMask.shape,iPntr,iLenthLabel)
+        arPhonesMask[iPntr:iPntr+iLenthLabel] = arPMask 
         iPntr += max(iLenthFeat,iLenthLabel)+iPaddingFrames
         iCur += 1
     arFeatData = arFeatData[:iPntr]
     vLabel = vLabel[:iPntr]
+    arPhonesMask = arPhonesMask[:iPntr]
+    vSilIndx = np.where(arPhonesMask[:,0]==1)
+    #print(vSilIndx)
+    vLabel[vSilIndx] = -1
     vPveInds = np.where(vLabel==1)[0]
     vNveInds = np.where(vLabel==0)[0]
     if bBalanceIt:
@@ -36,11 +48,12 @@ def GetXy(lFeatMask,iAttributeIndx,iNumFrames,iFeatSize,bBalanceIt=False):
         vNveInds = vNveInds[:iNumSelected]
     vSelectedIndx = np.r_[vPveInds,vNveInds]
     np.random.shuffle(vSelectedIndx)
+    #print(sum(arPhonesMask))
     #arContextFeatData = np.empty((vSelectedIndx.shape[0],iNumFrames*iFeatSize),dtype='float32') #Could be used insted of concatenation to speed up
     lCotextData = [arFeatData[vSelectedIndx+i] for i in range(-iPaddingFrames,iPaddingFrames+1)]
     arContextFeatData = np.c_[tuple(lCotextData)]
     vSelectedLabel = vLabel[vSelectedIndx]
-    return(arContextFeatData,vSelectedLabel)
+    return(arContextFeatData,vSelectedLabel)#,(sum(arPhonesMask[vPveInds]),sum(arPhonesMask[vNveInds])))
     #arContextFeatData = arCurCotextFeat        
     #print(arFeatData.shape,vLabel.shape,vSelectedIndx.shape,arContextFeatData.shape)
     
