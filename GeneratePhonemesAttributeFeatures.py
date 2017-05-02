@@ -90,7 +90,7 @@ with open(sys.argv[1]) as fMlf:
                 for iParam in range(len(lAttribParams)):
                     print('********************',iParam)
                     iAttributeIndx,iNFrams,iNhl,iNhu,sBestParamFile = lAttribParams[iParam]
-                    Py, yP = Decode(iNhu, iNhl, 2, arFeatData, os.path.join('Temp',sBestParamFile))
+                    Py, yP = Decode(iNhu, iNhl, 2, arFeatData, sBestParamFile)
                     arAttributeFeatures[:,iParam] = Py[:,0]
                 arFeat = arAttributeFeatures
             elif sFeatType == 'F':
@@ -99,7 +99,7 @@ with open(sys.argv[1]) as fMlf:
                 arAttributeFeatures = np.empty((arFeatData.shape[0],len(lAttribParams)),dtype='float')
                 for iParam in range(len(lAttribParams)):
                     iAttributeIndx,iNFrams,iNhl,iNhu,sBestParamFile = lAttribParams[iParam]
-                    Py, yP = Decode(iNhu, iNhl, 2, arFeatData, os.path.join('Temp',sBestParamFile))
+                    Py, yP = Decode(iNhu, iNhl, 2, arFeatData, sBestParamFile)
                     arAttributeFeatures[:,iParam] = Py[:,0]
                 #arFeat = arAttributeFeatures
                 arFeat = np.c_[arAttributeFeatures,arFeatData[:,312:390]]
@@ -139,7 +139,7 @@ if sFeatType == 'A': #Attribute Features
     arAttributeFeatures = np.empty((arFeatData.shape[0],len(lAttribParams)),dtype='float')
     for iParam in range(len(lAttribParams)):
         iAttributeIndx,iNFrams,iNhl,iNhu,sBestParamFile = lAttribParams[iParam]
-        Py, yP = Decode(iNhu, iNhl, 2, arFeatData, os.path.join('Temp',sBestParamFile))
+        Py, yP = Decode(iNhu, iNhl, 2, arFeatData, sBestParamFile)
         arAttributeFeatures[:,iParam] = Py[:,0]
     arFeat = arAttributeFeatures
 elif sFeatType == 'F':
@@ -148,7 +148,7 @@ else:
     arAttributeFeatures = np.empty((arFeatData.shape[0],len(lAttribParams)),dtype='float')
     for iParam in range(len(lAttribParams)):
         iAttributeIndx,iNFrams,iNhl,iNhu,sBestParamFile = lAttribParams[iParam]
-        Py, yP = Decode(iNhu, iNhl, 2, arFeatData, os.path.join('Temp',sBestParamFile))
+        Py, yP = Decode(iNhu, iNhl, 2, arFeatData, sBestParamFile)
         arAttributeFeatures[:,iParam] = Py[:,0]
     #arFeat = arAttributeFeatures
     arFeat = np.c_[arAttributeFeatures,arFeatData[:,312:390]]
