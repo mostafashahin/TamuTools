@@ -52,6 +52,38 @@ with open(sys.argv[7]) as fPhonemes:
 #iNumAttributes = len(enumAttributes)
 #with open(sys.argv[2]) as fList:
 #    lListFiles = [os.path.splitext(os.path.basename(sLine))[0] for sLine in fList.read().splitlines()]
+def GetPhoneFeat(arFeatData,lStartIndxs):
+    global iBNFeatSize
+    #print(iChunkIndx,arFeatData.shape)
+    if sFeatType == 'A': #Attribute Features
+        arAttributeFeatures = np.empty((arFeatData.shape[0],len(lAttribParams)),dtype='float')
+        for iParam in range(len(lAttribParams)):
+            print('********************',iParam)
+            iAttributeIndx,iNFrams,iNhl,iNhu,iBNFeatSize,sBestParamFile = lAttribParams[iParam]
+            Py, yP = Decode(iNhu, iNhl, 2, arFeatData, sBestParamFile)
+            arAttributeFeatures[:,iParam] = Py[:,0]
+        arFeat = arAttributeFeatures
+    elif sFeatType == 'F':
+        arFeat = arFeatData[:,312:390]
+    elif sFeatType == 'AF':
+        arAttributeFeatures = np.empty((arFeatData.shape[0],len(lAttribParams)),dtype='float')
+        for iParam in range(len(lAttribParams)):
+            iAttributeIndx,iNFrams,iNhl,iNhu,iBNFeatSize,sBestParamFile = lAttribParams[iParam]
+            Py, yP = Decode(iNhu, iNhl, 2, arFeatData, sBestParamFile)
+            arAttributeFeatures[:,iParam] = Py[:,0]
+            #arFeat = arAttributeFeatures
+        arFeat = np.c_[arAttributeFeatures,arFeatData[:,312:390]]
+            #arFeat = arFeatData
+    else:
+        arAttributeFeatures = np.empty((arFeatData.shape[0],len(lAttribParams)*iBNFeatSize),dtype='float')
+        for iParam in range(len(lAttribParams)):
+            iAttributeIndx,iNFrams,iNhl,iNhu,iBNFeatSize,sBestParamFile = lAttribParams[iParam]
+            Py, yP = Decode(iNhu, iNhl, 2, arFeatData, sBestParamFile,iBNhl=3,iBNhu=iBNFeatSize)
+            arAttributeFeatures[:,iParam*iBNFeatSize:iParam*iBNFeatSize+iBNFeatSize] = Py
+        arFeat = arAttributeFeatures
+    print('xxxxxxxxxxx ',arFeat.shape,lStartIndxs)
+    return arFeat
+
 iChunkIndx = 0
 with open(sys.argv[1]) as fMlf:
     iCounter=0
@@ -88,34 +120,7 @@ with open(sys.argv[1]) as fMlf:
         if iCounter == iNumChunkFiles:
             print('\n********************************iCounter = ',iCounter,len(lChunkFiles),'\n')
             arFeatData,lStartIndxs = GetX(lChunkFiles,iMaxNumFrams,78)
-            #print(iChunkIndx,arFeatData.shape)
-
-            if sFeatType == 'A': #Attribute Features
-                arAttributeFeatures = np.empty((arFeatData.shape[0],len(lAttribParams)),dtype='float')
-                for iParam in range(len(lAttribParams)):
-                    print('********************',iParam)
-                    iAttributeIndx,iNFrams,iNhl,iNhu,iBNFeatSize,sBestParamFile = lAttribParams[iParam]
-                    Py, yP = Decode(iNhu, iNhl, 2, arFeatData, sBestParamFile)
-                    arAttributeFeatures[:,iParam] = Py[:,0]
-                arFeat = arAttributeFeatures
-            elif sFeatType == 'F':
-                arFeat = arFeatData[:,312:390]
-            elif sFeatType == 'AF':
-                arAttributeFeatures = np.empty((arFeatData.shape[0],len(lAttribParams)),dtype='float')
-                for iParam in range(len(lAttribParams)):
-                    iAttributeIndx,iNFrams,iNhl,iNhu,iBNFeatSize,sBestParamFile = lAttribParams[iParam]
-                    Py, yP = Decode(iNhu, iNhl, 2, arFeatData, sBestParamFile)
-                    arAttributeFeatures[:,iParam] = Py[:,0]
-                #arFeat = arAttributeFeatures
-                arFeat = np.c_[arAttributeFeatures,arFeatData[:,312:390]]
-                #arFeat = arFeatData
-            else:
-                arAttributeFeatures = np.empty((arFeatData.shape[0],len(lAttribParams)*iBNFeatSize),dtype='float')
-                for iParam in range(len(lAttribParams)):
-                    iAttributeIndx,iNFrams,iNhl,iNhu,iBNFeatSize,sBestParamFile = lAttribParams[iParam]
-                    Py, yP = Decode(iNhu, iNhl, 2, arFeatData, sBestParamFile,iBNhl=3,iBNhu=iBNFeatSize)
-                    arAttributeFeatures[:,iParam*iBNFeatSize:iParam*iBNFeatSize+iBNFeatSize] = Py
-                arFeat = arAttributeFeatures
+            arFeat = GetPhoneFeat(arFeatData,lStartIndxs)
             for sPhone in lPhonemes:
                 lPhoneTest = []
                 vPhoneMask_Train = np.zeros((arFeatData.shape[0]),dtype='bool')
@@ -146,31 +151,7 @@ with open(sys.argv[1]) as fMlf:
             iChunkIndx += 1
 print(iCounter)
 arFeatData,lStartIndxs = GetX(lChunkFiles,iMaxNumFrams,78)
-#print(arFeatData.shape)
-if sFeatType == 'A': #Attribute Features
-    arAttributeFeatures = np.empty((arFeatData.shape[0],len(lAttribParams)),dtype='float')
-    for iParam in range(len(lAttribParams)):
-        iAttributeIndx,iNFrams,iNhl,iNhu,iBNFeatSize,sBestParamFile = lAttribParams[iParam]
-        Py, yP = Decode(iNhu, iNhl, 2, arFeatData, sBestParamFile)
-        arAttributeFeatures[:,iParam] = Py[:,0]
-    arFeat = arAttributeFeatures
-elif sFeatType == 'F':
-    arFeat = arFeatData[:,312:390]
-elif sFeatType == 'AF':
-    arAttributeFeatures = np.empty((arFeatData.shape[0],len(lAttribParams)),dtype='float')
-    for iParam in range(len(lAttribParams)):
-        iAttributeIndx,iNFrams,iNhl,iNhu,iBNFeatSize,sBestParamFile = lAttribParams[iParam]
-        Py, yP = Decode(iNhu, iNhl, 2, arFeatData, sBestParamFile)
-        arAttributeFeatures[:,iParam] = Py[:,0]
-    #arFeat = arAttributeFeatures
-    arFeat = np.c_[arAttributeFeatures,arFeatData[:,312:390]]
-else:
-    arAttributeFeatures = np.empty((arFeatData.shape[0],len(lAttribParams)*iBNFeatSize),dtype='float')     
-    for iParam in range(len(lAttribParams)):                                              
-        iAttributeIndx,iNFrams,iNhl,iNhu,iBNFeatSize,sBestParamFile = lAttribParams[iParam]           
-        Py, yP = Decode(iNhu, iNhl, 2, arFeatData, sBestParamFile,iBNhl=3,iBNhu=iBNFeatSize)
-        arAttributeFeatures[:,iParam*iBNFeatSize:iParam*iBNFeatSize+iBNFeatSize] = Py     
-    arFeat = arAttributeFeatures
+arFeat = GetPhoneFeat(arFeatData,lStartIndxs)
 for sPhone in lPhonemes:
     lPhoneTest = []
     vPhoneMask_Train = np.zeros((arFeatData.shape[0]),dtype='bool')
