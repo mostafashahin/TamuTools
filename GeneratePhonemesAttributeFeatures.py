@@ -7,11 +7,11 @@ import numpy as np
 #import hickle as hkl
 from random import shuffle
 from sklearn.externals import joblib
-sys.path.append('/panfs/vol/m/moshahi34/Tools/code')
+sys.path.append('/panfs/vol/m/moshahi34/TamuTools/code')
 from GetDataFromListV2 import GetX
 from DNN_DecodeV2 import Decode
-if len(sys.argv) != 9:
-    print('Usage: GeneratePhonemesAttributeFeatures.py MlfFile ListAttributeParameters featFilePath TrainingList ValidList TestingList PhoneList FeatType')
+if len(sys.argv) != 10:
+    print('Usage: GeneratePhonemesAttributeFeatures.py MlfFile ListAttributeParameters featFilePath TrainingList ValidList TestingList PhoneList FeatType OutPath')
     sys.exit(1)
 
 sMLFFile = sys.argv[1]
@@ -20,6 +20,10 @@ sFeaturePath = sys.argv[3]
 fLogFile = open('GeneratePhonemesAttributeFeatures.log','w')
 sTrainingScp,sValidScp,sTestScp = sys.argv[4:7]
 sFeatType = sys.argv[8]
+sOutPath = sys.argv[9]
+if not os.path.isdir(sOutPath):
+    os.makedirs(sOutPath)
+#iBNFeatSize = int(sys.argv[9])
 with open(sTrainingScp) as fTrainingScp, open(sValidScp) as fValidScp, open(sTestScp) as fTestScp:
     lTrainingFiles = [os.path.splitext(os.path.basename(sLine))[0] for sLine in fTrainingScp.read().splitlines()]
     lValidFiles = [os.path.splitext(os.path.basename(sLine))[0] for sLine in fValidScp.read().splitlines()]
@@ -28,6 +32,7 @@ with open(sAttributeParam) as fAttribParams:
     lAttribParams = [[int(i) for i in sLine.split()[:-1]]+[sLine.split()[-1]] for sLine in fAttribParams.read().splitlines()]
     print(lAttribParams[0])
 iMaxNumFrams = max([p[1] for p in lAttribParams])
+iBNFeatSize = p[4]
 #Configures
 iSampleRate = 10 #Sampling rate of the feature files in mili seconds
 sSavingFormat = 'J'
@@ -45,8 +50,8 @@ with open(sys.argv[7]) as fPhonemes:
 #enumAttributes = list(enumerate(lAttributes))
 #Load Best Params List
 #iNumAttributes = len(enumAttributes)
-with open(sys.argv[2]) as fList:
-    lListFiles = [os.path.splitext(os.path.basename(sLine))[0] for sLine in fList.read().splitlines()]
+#with open(sys.argv[2]) as fList:
+#    lListFiles = [os.path.splitext(os.path.basename(sLine))[0] for sLine in fList.read().splitlines()]
 iChunkIndx = 0
 with open(sys.argv[1]) as fMlf:
     iCounter=0
@@ -89,21 +94,28 @@ with open(sys.argv[1]) as fMlf:
                 arAttributeFeatures = np.empty((arFeatData.shape[0],len(lAttribParams)),dtype='float')
                 for iParam in range(len(lAttribParams)):
                     print('********************',iParam)
-                    iAttributeIndx,iNFrams,iNhl,iNhu,sBestParamFile = lAttribParams[iParam]
+                    iAttributeIndx,iNFrams,iNhl,iNhu,iBNFeatSize,sBestParamFile = lAttribParams[iParam]
                     Py, yP = Decode(iNhu, iNhl, 2, arFeatData, sBestParamFile)
                     arAttributeFeatures[:,iParam] = Py[:,0]
                 arFeat = arAttributeFeatures
             elif sFeatType == 'F':
                 arFeat = arFeatData[:,312:390]
-            else:
+            elif sFeatType == 'AF':
                 arAttributeFeatures = np.empty((arFeatData.shape[0],len(lAttribParams)),dtype='float')
                 for iParam in range(len(lAttribParams)):
-                    iAttributeIndx,iNFrams,iNhl,iNhu,sBestParamFile = lAttribParams[iParam]
+                    iAttributeIndx,iNFrams,iNhl,iNhu,iBNFeatSize,sBestParamFile = lAttribParams[iParam]
                     Py, yP = Decode(iNhu, iNhl, 2, arFeatData, sBestParamFile)
                     arAttributeFeatures[:,iParam] = Py[:,0]
                 #arFeat = arAttributeFeatures
                 arFeat = np.c_[arAttributeFeatures,arFeatData[:,312:390]]
                 #arFeat = arFeatData
+            else:
+                arAttributeFeatures = np.empty((arFeatData.shape[0],len(lAttribParams)*iBNFeatSize),dtype='float')
+                for iParam in range(len(lAttribParams)):
+                    iAttributeIndx,iNFrams,iNhl,iNhu,iBNFeatSize,sBestParamFile = lAttribParams[iParam]
+                    Py, yP = Decode(iNhu, iNhl, 2, arFeatData, sBestParamFile,iBNhl=3,iBNhu=iBNFeatSize)
+                    arAttributeFeatures[:,iParam*iBNFeatSize:iParam*iBNFeatSize+iBNFeatSize] = Py
+                arFeat = arAttributeFeatures
             for sPhone in lPhonemes:
                 lPhoneTest = []
                 vPhoneMask_Train = np.zeros((arFeatData.shape[0]),dtype='bool')
@@ -120,10 +132,10 @@ with open(sys.argv[1]) as fMlf:
                     else:
                         vPhoneMask_Test[iStartIndx+iPSFram: iStartIndx+iPEFram] = True
                         lPhoneTest.append(arFeat[vPhoneMask_Test])
-                joblib.dump(arFeat[vPhoneMask_Train],sPhone+'_Train_'+sFeatType+'_'+str(iChunkIndx))
-                joblib.dump(arFeat[vPhoneMask_Valid],sPhone+'_Valid_'+sFeatType+'_'+str(iChunkIndx))
+                joblib.dump(arFeat[vPhoneMask_Train],os.path.join(sOutPath,sPhone+'_Train_'+sFeatType+'_'+str(iChunkIndx)))
+                joblib.dump(arFeat[vPhoneMask_Valid],os.path.join(sOutPath,sPhone+'_Valid_'+sFeatType+'_'+str(iChunkIndx)))
                 #joblib.dump(arFeat[vPhoneMask_Test],sPhone+'_Test_'+str(iChunkIndx))
-                joblib.dump(lPhoneTest,sPhone+'_Test_'+sFeatType+'_'+str(iChunkIndx))
+                joblib.dump(lPhoneTest,os.path.join(sOutPath,sPhone+'_Test_'+sFeatType+'_'+str(iChunkIndx)))
             iCounter=0
             lChunkTypes = []
             lChunkFiles = []
@@ -138,20 +150,27 @@ arFeatData,lStartIndxs = GetX(lChunkFiles,iMaxNumFrams,78)
 if sFeatType == 'A': #Attribute Features
     arAttributeFeatures = np.empty((arFeatData.shape[0],len(lAttribParams)),dtype='float')
     for iParam in range(len(lAttribParams)):
-        iAttributeIndx,iNFrams,iNhl,iNhu,sBestParamFile = lAttribParams[iParam]
+        iAttributeIndx,iNFrams,iNhl,iNhu,iBNFeatSize,sBestParamFile = lAttribParams[iParam]
         Py, yP = Decode(iNhu, iNhl, 2, arFeatData, sBestParamFile)
         arAttributeFeatures[:,iParam] = Py[:,0]
     arFeat = arAttributeFeatures
 elif sFeatType == 'F':
     arFeat = arFeatData[:,312:390]
-else:
+elif sFeatType == 'AF':
     arAttributeFeatures = np.empty((arFeatData.shape[0],len(lAttribParams)),dtype='float')
     for iParam in range(len(lAttribParams)):
-        iAttributeIndx,iNFrams,iNhl,iNhu,sBestParamFile = lAttribParams[iParam]
+        iAttributeIndx,iNFrams,iNhl,iNhu,iBNFeatSize,sBestParamFile = lAttribParams[iParam]
         Py, yP = Decode(iNhu, iNhl, 2, arFeatData, sBestParamFile)
         arAttributeFeatures[:,iParam] = Py[:,0]
     #arFeat = arAttributeFeatures
     arFeat = np.c_[arAttributeFeatures,arFeatData[:,312:390]]
+else:
+    arAttributeFeatures = np.empty((arFeatData.shape[0],len(lAttribParams)*iBNFeatSize),dtype='float')     
+    for iParam in range(len(lAttribParams)):                                              
+        iAttributeIndx,iNFrams,iNhl,iNhu,iBNFeatSize,sBestParamFile = lAttribParams[iParam]           
+        Py, yP = Decode(iNhu, iNhl, 2, arFeatData, sBestParamFile,iBNhl=3,iBNhu=iBNFeatSize)
+        arAttributeFeatures[:,iParam*iBNFeatSize:iParam*iBNFeatSize+iBNFeatSize] = Py     
+    arFeat = arAttributeFeatures
 for sPhone in lPhonemes:
     lPhoneTest = []
     vPhoneMask_Train = np.zeros((arFeatData.shape[0]),dtype='bool')
@@ -169,10 +188,10 @@ for sPhone in lPhonemes:
             vPhoneMask_Test[iStartIndx+iPSFram: iStartIndx+iPEFram] = True
             lPhoneTest.append(arFeat[vPhoneMask_Test])
     print('********************',len(lPhoneTest))
-    joblib.dump(arFeat[vPhoneMask_Train],sPhone+'_Train_'+sFeatType+'_'+str(iChunkIndx))
-    joblib.dump(arFeat[vPhoneMask_Valid],sPhone+'_Valid_'+sFeatType+'_'+str(iChunkIndx))
+    joblib.dump(arFeat[vPhoneMask_Train],os.path.join(sOutPath,sPhone+'_Train_'+sFeatType+'_'+str(iChunkIndx)))
+    joblib.dump(arFeat[vPhoneMask_Valid],os.path.join(sOutPath,sPhone+'_Valid_'+sFeatType+'_'+str(iChunkIndx)))
     #joblib.dump(arFeat[vPhoneMask_Test],sPhone+'_Test_'+str(iChunkIndx))
-    joblib.dump(lPhoneTest,sPhone+'_Test_'+sFeatType+'_'+str(iChunkIndx))
+    joblib.dump(lPhoneTest,os.path.join(sOutPath,sPhone+'_Test_'+sFeatType+'_'+str(iChunkIndx)))
 arFeatData,lStartIndxs = GetX(lChunkFiles,iMaxNumFrams,78)
 print(arFeatData.shape)
 
