@@ -52,10 +52,12 @@ with open(sys.argv[7]) as fPhonemes:
 #iNumAttributes = len(enumAttributes)
 #with open(sys.argv[2]) as fList:
 #    lListFiles = [os.path.splitext(os.path.basename(sLine))[0] for sLine in fList.read().splitlines()]
-def GetPhoneFeat(arFeatData,lStartIndxs):
+def GetPhoneFeat(arFeatData,lStartIndxs,nFrams):
     global iBNFeatSize
+    #global sFeatType
     #print(iChunkIndx,arFeatData.shape)
     if sFeatType == 'A': #Attribute Features
+        print('helllllllo')
         arAttributeFeatures = np.empty((arFeatData.shape[0],len(lAttribParams)),dtype='float')
         for iParam in range(len(lAttribParams)):
             print('********************',iParam)
@@ -75,14 +77,34 @@ def GetPhoneFeat(arFeatData,lStartIndxs):
         arFeat = np.c_[arAttributeFeatures,arFeatData[:,312:390]]
             #arFeat = arFeatData
     else:
+        print('hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhheeeeeeeeeeeeeeeeeeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaarrrrrrrrrrrrrr')
         arAttributeFeatures = np.empty((arFeatData.shape[0],len(lAttribParams)*iBNFeatSize),dtype='float')
         for iParam in range(len(lAttribParams)):
             iAttributeIndx,iNFrams,iNhl,iNhu,iBNFeatSize,sBestParamFile = lAttribParams[iParam]
             Py, yP = Decode(iNhu, iNhl, 2, arFeatData, sBestParamFile,iBNhl=3,iBNhu=iBNFeatSize)
             arAttributeFeatures[:,iParam*iBNFeatSize:iParam*iBNFeatSize+iBNFeatSize] = Py
         arFeat = arAttributeFeatures
-    print('xxxxxxxxxxx ',arFeat.shape,lStartIndxs)
-    return arFeat
+    iNumPad = (nFrams-1)/2
+    arPad = np.zeros((iNumPad,arFeat.shape[1]))
+    vOffst = np.arange(len(lStartIndxs))*iNumPad
+    vIndxs = lStartIndxs + vOffst
+    iMask = np.ones((arFeat.shape[0]+iNumPad*len(lStartIndxs)),dtype='bool')
+    #print('arFeat[100] ',arFeat[100] )
+    for indx in vIndxs:
+        arFeat = np.insert(arFeat,indx,arPad,axis=0)
+        iMask[indx:indx+iNumPad] = False
+        temp = np.where(iMask)
+        #print('arFeat ',arFeat.shape,temp[0].shape)
+    vSelectedIndx = np.where(iMask)[0]
+    #aaa = arFeat[iMask]
+    arFeat = np.r_[arFeat,arPad]
+    #print('aaaa ', aaa.shape,aaa[100])
+    #print('xxxxxxxxxxx ',arFeat.shape,lStartIndxs,vIndxs,iMask.shape,vSelectedIndx[:20])
+    #arContxFeat = np.empty((arFeat.shape[0],arFeat.shape[1]*nFrams),dtype='float')
+    lCotextData = [arFeat[vSelectedIndx+i] for i in range(-iNumPad,iNumPad+1)]
+    arContextFeatData = np.c_[tuple(lCotextData)]
+    #print('arContextFeatData ',arContextFeatData.shape)
+    return arContextFeatData
 
 iChunkIndx = 0
 with open(sys.argv[1]) as fMlf:
@@ -115,12 +137,15 @@ with open(sys.argv[1]) as fMlf:
             iSFram = int(lLine[0])/iSampleRate**5
             iEFram = int(lLine[1])/iSampleRate**5
             sPhoneme = lLine[2]
-            dChunkPhone[sPhoneme].append([iCounter,iSFram,iEFram])
+            if sPhoneme in dChunkPhone:
+                dChunkPhone[sPhoneme].append([iCounter,iSFram,iEFram])
         iCounter += 1
         if iCounter == iNumChunkFiles:
+            #print(dChunkPhone)
             print('\n********************************iCounter = ',iCounter,len(lChunkFiles),'\n')
             arFeatData,lStartIndxs = GetX(lChunkFiles,iMaxNumFrams,78)
-            arFeat = GetPhoneFeat(arFeatData,lStartIndxs)
+            #print(arFeatData.shape,lStartIndxs)
+            arFeat = GetPhoneFeat(arFeatData,lStartIndxs,1)
             for sPhone in lPhonemes:
                 lPhoneTest = []
                 vPhoneMask_Train = np.zeros((arFeatData.shape[0]),dtype='bool')
@@ -150,8 +175,10 @@ with open(sys.argv[1]) as fMlf:
                 dChunkPhone[sPhone] = []
             iChunkIndx += 1
 print(iCounter)
+#print(dChunkPhone)
 arFeatData,lStartIndxs = GetX(lChunkFiles,iMaxNumFrams,78)
-arFeat = GetPhoneFeat(arFeatData,lStartIndxs)
+#print(arFeatData.shape,lStartIndxs)
+arFeat = GetPhoneFeat(arFeatData,lStartIndxs,1)
 for sPhone in lPhonemes:
     lPhoneTest = []
     vPhoneMask_Train = np.zeros((arFeatData.shape[0]),dtype='bool')

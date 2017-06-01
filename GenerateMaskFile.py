@@ -3,6 +3,7 @@ from __future__ import print_function
 from collections import OrderedDict
 import sys,os
 import gzip,cPickle
+from math import ceil
 import numpy as np
 #import hickle as hkl
 from random import shuffle
@@ -76,40 +77,49 @@ with open(sys.argv[1]) as fMlf:
         print(int((float(i)/len(lSEInx))*100),'%',end='\r')
         iSinx = lSEInx[i]
         iEinx = lSEInx[i+1]
+        iTotalNumFrames = int(ceil(float(lMlf[iEinx-1].split()[-2])/iSampleRate**5))
         sFileName = os.path.splitext(os.path.basename(lMlf[iSinx][1:-1]))[0]
         if sFileName not in lListFiles:
             print('File: ',sFileName,' Not Registered',file=fLogFile)
             continue
-        arFileMask = np.asarray([]).reshape(0,iNumAttributes)
-        arPhoneFileMask = np.asarray([]).reshape(0,iNumPhones)
+        #arFileMask = np.asarray([]).reshape(0,iNumAttributes)
+        arFileMask = np.zeros((iTotalNumFrames,iNumAttributes),dtype=int)
+        #arPhoneFileMask = np.asarray([]).reshape(0,iNumPhones)
+        arPhoneFileMask = np.zeros((iTotalNumFrames,iNumPhones),dtype=int)
         print(sFileName,file=fPhones)
         for j in range(iSinx+1,iEinx):
             lLine = lMlf[j].split()
             iSFram = int(round(float(lLine[0])/iSampleRate**5))
             iEFram = int(round(float(lLine[1])/iSampleRate**5))
             sPhoneme = lLine[2]
-            if sPhoneme not in lPhonemes:
-                iPhoneIndx = -1
-                arPhoneMask = np.zeros(iNumAttributes)
-            else:
+            if sPhoneme in lPhonemes:
+            #    iPhoneIndx = -1
+            #    arPhoneMask = np.zeros(iNumAttributes)
                 iPhoneIndx = lPhonemes.index(sPhoneme)
                 arPhoneMask = dPhonemeMask[sPhoneme]
-            arPhoneIdxMask = np.zeros((iNumPhones),dtype='int')
-            arPhoneIdxMask[iPhoneIndx] = 1
-            iNumSamples = iEFram - iSFram
-            if iNumSamples == 0:
-                print('Duration of '+sPhoneme+' in file ' + sFileName + ' Less than 10msec')
-                continue
+                arFileMask[iSFram:iEFram] = arPhoneMask
+                arPhoneFileMask[iSFram:iEFram,iPhoneIndx] = 1
+            #arPhoneIdxMask = np.zeros((iNumPhones),dtype='int')
+            #arPhoneIdxMask[iPhoneIndx] = 1
+            #iNumSamples = iEFram - iSFram
+            #if iNumSamples == 0:
+            #    print('Duration of '+sPhoneme+' in file ' + sFileName + ' Less than 10msec')
+            #    continue
             #dPhonemeCount[sPhoneme] += arPhoneMask
-            arPhoneMask = arPhoneMask.reshape(1,iNumAttributes)
-            arPhoneFramMask = arPhoneMask.repeat(iNumSamples,axis=0)
-            arFileMask = np.r_[arFileMask,arPhoneFramMask]
-            arPhoneIdxMask = arPhoneIdxMask.reshape(1,iNumPhones)
-            arPhoneIdxFramMask = arPhoneIdxMask.repeat(iNumSamples,axis=0)
-            arPhoneFileMask = np.r_[arPhoneFileMask,arPhoneIdxFramMask]
-            print(sPhoneme,arPhoneFramMask.shape,file=fPhones)
-            print(arPhoneFramMask[0],file=fPhones)
+            #arPhoneMask = arPhoneMask.reshape(1,iNumAttributes)
+            #arPhoneFramMask = arPhoneMask.repeat(iNumSamples,axis=0)
+            #arFileMask = np.r_[arFileMask,arPhoneFramMask]
+            #arPhoneIdxMask = arPhoneIdxMask.reshape(1,iNumPhones)
+            #arPhoneIdxFramMask = arPhoneIdxMask.repeat(iNumSamples,axis=0)
+            #arPhoneFileMask = np.r_[arPhoneFileMask,arPhoneIdxFramMask]
+            #print(iSFram,iEFram)
+            arPhoneFramMask = arPhoneFileMask[iSFram:iEFram]
+            if arPhoneFramMask.shape[0] != 0:
+                print(sPhoneme,arPhoneFramMask.shape,file=fPhones)
+                print(arPhoneFramMask[0],file=fPhones)
+                print(arFileMask[iSFram:iEFram][0],file=fPhones)
         joblib.dump(arFileMask,os.path.join(sOutPath,sFileName+'.mask'))
         joblib.dump(arPhoneFileMask,os.path.join(sOutPath,sFileName+'.pmask'))
+
 fPhones.close()
 fLogFile.close()

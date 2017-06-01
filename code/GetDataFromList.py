@@ -37,7 +37,8 @@ def GetXy(lFeatMask,iAttributeIndx,iNumFrames,iFeatSize,bBalanceIt=False):
     arPhonesMask = arPhonesMask[:iPntr]
     vSilIndx = np.where(arPhonesMask[:,0]==1)
     #print(vSilIndx)
-    vLabel[vSilIndx] = -1
+    if iAttributeIndx != 0:
+        vLabel[vSilIndx] = -1
     vPveInds = np.where(vLabel==1)[0]
     vNveInds = np.where(vLabel==0)[0]
     if bBalanceIt:

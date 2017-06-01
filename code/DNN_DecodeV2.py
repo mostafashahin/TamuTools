@@ -32,7 +32,7 @@ class DBN(object):
     """
 
     def __init__(self, numpy_rng, theano_rng=None, n_ins=None,
-                 hidden_layers_sizes=[50], n_outs=None):
+                 hidden_layers_sizes=[50], iBNhl = -1, n_outs=None):
         """This class is made to support a variable number of layers.
 
         :type numpy_rng: numpy.random.RandomState
@@ -142,6 +142,10 @@ class DBN(object):
         self.errors = self.logLayer.errors(self.y)
         self.y_pred = self.logLayer.y_pred
         self.p_y = self.logLayer.p_y_given_x
+        #print(len(self.sigmoid_layers))
+        #for l in self.sigmoid_layers:
+        #    print('0 ',l.output.shape)
+        self.BN_f = self.sigmoid_layers[iBNhl].output
 
     def build_finetune_functions(self, datasets, batch_size):
         '''Generates a function `train` that implements one step of
@@ -188,7 +192,11 @@ class DBN(object):
                                             (index + 1) * batch_size]})
         yPred_i = theano.function([index],self.y_pred,
                        givens={self.x: test_set_x[index * batch_size:(index + 1) * batch_size]})
+
         p_y_i = theano.function([index],self.p_y,
+                       givens={self.x: test_set_x[index * batch_size:(index + 1) * batch_size]})
+
+        BN_i = theano.function([index],self.BN_f,
                        givens={self.x: test_set_x[index * batch_size:(index + 1) * batch_size]})
         # Create a function that scans the entire test set
         def test_score():
@@ -204,10 +212,19 @@ class DBN(object):
                 Py = numpy.concatenate((Py,p_y_i(i)))
             Py = numpy.delete(Py,0,axis=0)
             return Py
-        return test_score, yPred, Py_given_x
+        def BottleNek(iBNhu):
+            #print('1 ',iBNhu)
+            BN = numpy.empty((1,iBNhu))
+            for i in xrange(n_test_batches):
+                BNi = BN_i(i)
+                #print('2 ',BN.shape,BNi.shape)
+                BN = numpy.concatenate((BN,BNi))
+            BN = numpy.delete(BN,0,axis=0)
+            return BN
+        return test_score, yPred, Py_given_x, BottleNek
 
 
-def Decode(n_hus, n_hls, n_out, arFeatures, sParamFile, vLabels = None, batch_size=100, bGet_yP=False):
+def Decode(n_hus, n_hls, n_out, arFeatures, sParamFile, iBNhl = -1, iBNhu = -1, vLabels = None, batch_size=100, bGet_yP=False):
     """
     Demonstrates how to train and test a Deep Belief Network.
 
@@ -239,11 +256,19 @@ def Decode(n_hus, n_hls, n_out, arFeatures, sParamFile, vLabels = None, batch_si
     
     # numpy random generator
     numpy_rng = numpy.random.RandomState(123)
-    print ('... building the model')
+    print ('... building the modelN')
     # construct the Deep Belief Network
+    if iBNhu == -1:
+        h_l_Szs = [n_hus for i in range(n_hls)]
+    else:
+        h_l_Szs = [n_hus for i in range(n_hls)]
+        h_l_Szs[iBNhl] = iBNhu
+        print(h_l_Szs)
+
     dbn = DBN(numpy_rng=numpy_rng, n_ins=n_inp,
-              hidden_layers_sizes=[n_hus for i in range(n_hls)],
-              n_outs=n_out)
+                  hidden_layers_sizes=h_l_Szs,
+                  iBNhl = iBNhl,
+                  n_outs=n_out)
     #Load params
     with gzip.open(sParamFile,'rb') as fbestParam:
         best_params = cPickle.load(fbestParam)
@@ -254,12 +279,15 @@ def Decode(n_hus, n_hls, n_out, arFeatures, sParamFile, vLabels = None, batch_si
 
     for param in dbn.params:
         print(param.get_value().shape)
-    test_model, gety_pred, getP_y = dbn.build_finetune_functions(
+    test_model, gety_pred, getP_y,get_BN_f = dbn.build_finetune_functions(
                 datasets=datasets, batch_size=batch_size)
 
     #test_losses = test_model()
     #test_score = numpy.mean(test_losses)
-    Py = getP_y(n_out)
+    if iBNhu == -1:
+        Py = getP_y(n_out)
+    else:
+        Py = get_BN_f(iBNhu)
     #print (Py.shape)
     #numpy.savetxt('p_y_x',Py)
     if bGet_yP:

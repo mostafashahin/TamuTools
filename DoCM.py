@@ -34,7 +34,99 @@ def loadTrainingData(sPhone,sDataPath,iNumAttributes):
             iPoint +=iCurSize
     return arPhoneData[:iPoint]
 
-def EvaluatePhone(sMlfFile, sPhoneAttrFile, arFeatData, dFileIndx):
+def EvaluatePhone(sMlfFile, sPhoneAttrFile,sFileList):
+    with open(sFileList) as fList:
+        lFiles = [splitext(basename(sFile))[0] for sFile in fList.read().splitlines()]
+    dPhonAttr = {}
+    with open(sPhoneAttrFile) as fPhAtt:
+        for sLine in fPhAtt.read().splitlines():
+            lLineS = sLine.split()
+            dPhonAttr[lLineS[0]] = lLineS[1:]
+    with open(sMlfFile) as fMlf:
+        lMlf = fMlf.read().splitlines()
+    lSEInx = [i for i in range(len(lMlf)) if lMlf[i][0]=='"' or lMlf[i][0] == '.'] #Get Start and End index of each file
+    dPhoneScalModel = {}
+    dFileEval = {}
+    for i in range(0,len(lSEInx),2):
+        print(int((float(i)/len(lSEInx))*100),'%',end='\r')
+        iSinx = lSEInx[i]
+        iEinx = lSEInx[i+1]
+        sFileName = splitext(basename(lMlf[iSinx][1:-1]))[0]
+        if sFileName not in lFiles:
+            continue
+        dFileEval[sFileName] = []
+        arA = np.asarray([])
+        arMT = np.asarray([])
+        arBN = np.asarray([])
+        arMT10 = np.asarray([])
+        for j in range(iSinx+1,iEinx):
+            lLine = lMlf[j].split()
+            iSFram = int(lLine[0])/iSampleRate**5
+            iEFram = int(lLine[1])/iSampleRate**5
+            sPhoneme = lLine[2]
+            if sPhoneme not in dPhonAttr:
+                sAttributeFile = 'Attributes_params'
+                sSufixModel = 'ASNSF'
+                iBNFeatSize = -1
+                sDataPath = 'phoneAttributes_fixed'
+            else:
+                sAttributeFile, sSufixModel, iBNFeatSize, sDataPath = dPhonAttr[sPhoneme]
+                iBNFeatSize = int(iBNFeatSize)
+            if iBNFeatSize == -1:
+                iNumAttributes = 26 
+            else:
+                iNumAttributes = 26 * iBNFeatSize
+            if sPhoneme not in dPhoneScalModel:
+                sModel = join('results',sPhoneme+'_'+sSufixModel+'.model')
+                #print(sModel)
+                with open(sModel) as fModel:
+                    clsf = cPickle.load(fModel)
+                with open(join('results',sPhoneme+'_'+sSufixModel+'.log'))as fPhoneLog:
+                    Line = fPhoneLog.read().splitlines()[-1]
+                sLine = Line.split()
+                if Line.find(',') == -1:
+                    indx = [int(s.replace('[','').replace(',','').replace(']','')) for s in sLine[7:]]
+                else:
+                    indx = [int(s.replace('[','').replace(',','').replace(']','')) for s in sLine[6:]]
+                arTraining = loadTrainingData(sPhoneme,sDataPath,iNumAttributes)#joblib.load(sTargetPhone+'.jbl')
+                scal = StandardScaler()
+                scal.fit(arTraining)
+                dPhoneScalModel[sPhoneme] = (clsf,indx,scal)
+            if sSufixModel == 'ASNSF':
+                if arA.shape[0] == 0:
+                    arA = joblib.load(join('featFiles_A',sFileName+'.feat'))
+                arAttFeat = arA[iSFram:iEFram]
+            elif sSufixModel == 'BN10F':
+                if arBN.shape[0] == 0:
+                    arBN = joblib.load(join('featFiles_BN',sFileName+'.feat'))
+                arAttFeat = arBN[iSFram:iEFram]
+            elif sSufixModel == 'MT':
+                if arMT.shape[0] == 0:
+                    arMT = joblib.load(join('featFiles_MT',sFileName+'.feat'))
+                arAttFeat = arMT[iSFram:iEFram]
+            elif sSufixModel == 'MT10':
+                if arMT10.shape[0] == 0:
+                    arMT10 = joblib.load(join('featFiles_MT10',sFileName+'.feat'))
+                arAttFeat = arMT10[iSFram:iEFram]
+            else:
+                if arA.shape[0] == 0:
+                    arA = joblib.load(join('featFiles_A',sFileName+'.feat'))
+                arAttFeat = arA[iSFram:iEFram]
+            clsf,indx,scal = dPhoneScalModel[sPhoneme]
+            arAttFeat_std = scal.transform(arAttFeat)
+            y_predict = clsf.predict(arAttFeat_std[:,indx])
+            iNumInClassFrams = np.where(y_predict == 1)[0].shape[0]
+            iNumOutClassFrams = np.where(y_predict == -1)[0].shape[0]
+            if iNumInClassFrams >= 0.25*iNumOutClassFrams:
+                _class = 1
+            else:
+                _class = 0
+            dFileEval[sFileName].append((sPhoneme,_class))
+    return dFileEval
+
+
+
+def EvaluatePhone_(sMlfFile, sPhoneAttrFile, arFeatData, dFileIndx):
     dPhonAttr = {}
     with open(sPhoneAttrFile) as fPhAtt:
         for sLine in fPhAtt.read().splitlines():
@@ -129,7 +221,7 @@ def EvaluatePhone(sMlfFile, sPhoneAttrFile, arFeatData, dFileIndx):
             y_predict = clsf.predict(arAttFeat_std[:,indx])
             iNumInClassFrams = np.where(y_predict == 1)[0].shape[0]
             iNumOutClassFrams = np.where(y_predict == -1)[0].shape[0]
-            if iNumInClassFrams >= iNumOutClassFrams:
+            if iNumInClassFrams >= 0.5*iNumOutClassFrams:
                 _class = 1
             else:
                 _class = 0
@@ -138,18 +230,7 @@ def EvaluatePhone(sMlfFile, sPhoneAttrFile, arFeatData, dFileIndx):
         print(sPhone,arData.shape,sAttributeFile, sSufixModel)
     return(dPhones)
 
-def ComputeAcc(dPhones,sRefMLF):
-    dFileEval = {}
-    for p in dPhones:
-        for item in dPhones[p]:
-            print(len(item),item[0])
-            if item[0] not in dFileEval:
-                dFileEval[item[0]] = [0]*300
-            print(len(dFileEval[item[0]]),item)
-            dFileEval[item[0]][item[3]] = (p,item[5])
-    for sFile in dFileEval:
-        dFileEval[sFile] = dFileEval[sFile][:dFileEval[sFile].index(0)]
-
+def ComputeAcc(dFileEval,sRefMLF):
     with open(sRefMLF) as fMlf:
         lMlf = fMlf.read().splitlines()
     lSEInx = [i for i in range(len(lMlf)) if lMlf[i][0]=='"' or lMlf[i][0] == '.'] #Get Start and End index of each file
@@ -158,6 +239,7 @@ def ComputeAcc(dPhones,sRefMLF):
     iCR = 0
     iFA = 0
     iFR = 0
+    dPhone = {}
     for i in range(0,len(lSEInx),2):
         print(int((float(i)/len(lSEInx))*100),'%',end='\r')
         iSinx = lSEInx[i]
@@ -168,18 +250,25 @@ def ComputeAcc(dPhones,sRefMLF):
         lEval = dFileEval[sFileName]
         iIndx = 0
         for line in lMlf[iSinx+1:iEinx]:
+            sPhone = line.split('-')[-1]
+            if sPhone not in dPhone:
+                dPhone[sPhone] = [0,0,0,0]
             if '-' in line:
                 if lEval[iIndx][1] == 0:
+                    dPhone[sPhone][1] += 1
                     iCR += 1
                     fTotal += 1
                 else:
+                    dPhone[sPhone][2] += 1
                     iFA += 1
                     fTotal += 1
             else:
                 if lEval[iIndx][1] == 0:
+                    dPhone[sPhone][3] += 1
                     iFR += 1
                     fTotal += 1
                 else:
+                    dPhone[sPhone][0] += 1
                     iCA += 1
                     fTotal += 1
             iIndx += 1
@@ -190,5 +279,6 @@ def ComputeAcc(dPhones,sRefMLF):
     R_CA = (float(iCA)/(iCA+iFR)) * 100.0
     R_CR = (float(iCR)/(iCR+iFA)) * 100.0
     FA = 2*(P_CA*R_CA)/(P_CA+R_CA)
+    print(dPhone)
     return(SA,P_CA,P_CR,R_CA,R_CR,FA)
     #return(dFileEval)
